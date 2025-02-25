@@ -2,7 +2,7 @@ Create a Console App
 
 
 Roll a die 1000 times.
-Use a generator that  generates random nubers between 0 and 1.
+Use a generator that  generates random numbers between 0 and 1.
 Give your answers in the table:
 
 Face        |Frequency      |Percentage
