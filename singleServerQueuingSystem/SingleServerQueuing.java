@@ -27,7 +27,10 @@ public class SingleServerQueuing{
     static double timeLastEvent;
     static double totalOfDelays;
 
+    //create timeArrival array with Q_limit+1 elements (because of ignore index 0)
     static double[] timeArrival = new double[Q_Limit+1];
+
+    //create timeNextEvent array of size 3, indices 1 and 2 are used
     static double[] timeNextEvent = new double[3];
 
     static PrintWriter outfile;
@@ -61,13 +64,13 @@ public class SingleServerQueuing{
          * I also want to mitigate premature event execution by the simulation engine.
          * 
          */
-        timeNextEvent[2] =  1.0e30;
+        timeNextEvent[2] =  1.0e+30;
 
     }
 
     static void timing(){
         int i;
-        double minTimeNextEvent = 1.0e29;
+        double minTimeNextEvent = 1.0e+29;
         nextEventType = 0;
 
         //determine the event type of the next event to occur
@@ -108,7 +111,7 @@ public class SingleServerQueuing{
             //check to see whether overflow condition exists
             if(numberInQueue > Q_Limit){
                 // the queue has overflowed so stop the simulation
-                outfile.printf("\n Overflow of the attar timeArrival at time %f", simulationTime);
+                outfile.printf("\n Overflow of the array timeArrival at time %f", simulationTime);
                 outfile.flush();
                 System.exit(2);
 
@@ -127,7 +130,7 @@ public class SingleServerQueuing{
             serverStatus = Busy;
 
             //schedule a departure (service completion)
-            timeNextEvent[2] = simulationTime+expon(meanService);
+            timeNextEvent[2] = simulationTime + expon(meanService);
 
         }
 
@@ -135,13 +138,13 @@ public class SingleServerQueuing{
 
     static void depart(){
         int i;
-        double delay;
+        double delay = 0.0;
 
         //check to see whether queue is empty
         if(numberInQueue == 0){
             // queue is empty, so make server idle and eliminate tje departure event from consideration
             serverStatus = Idle;
-            timeNextEvent[2] = 1.0e30;
+            timeNextEvent[2] = 1.0e+30;
 
         }
         else{
@@ -149,7 +152,7 @@ public class SingleServerQueuing{
             numberInQueue--;
 
             //compute delay of customer who is beginning service and update the total delay accumulator.
-            delay = simulationTime = timeArrival[1];
+            delay = simulationTime - timeArrival[1];
             totalOfDelays += delay;
 
             // increment the number of customers delayed, and schedule departure
@@ -183,15 +186,17 @@ public class SingleServerQueuing{
         timeLastEvent = simulationTime;
 
         //update area under numberInQueue function
-        areaNumberInQ += numberInQueue*timeSinceLastEvent;
+        areaNumberInQ += numberInQueue * timeSinceLastEvent;
 
         //update area under server-busy indicator function
         areaServerStatus += serverStatus * timeSinceLastEvent;
         
     }
 
+    /**
+     * Exponential variate generation function
+     */
     static double expon(double mean){
-        //return an exponential random variate with mean "mean"
         return -mean * Math.log(Math.random());
 
     }
@@ -207,7 +212,7 @@ public class SingleServerQueuing{
             infile = new Scanner(new File("mm1.in"));
             outfile = new PrintWriter("mm1.out");
 
-        } catch(Exception e){
+        } catch(FileNotFoundException e){
             System.out.println("File not found: " + e.getMessage());
             System.exit(1);
 
@@ -230,12 +235,12 @@ public class SingleServerQueuing{
             numberDelaysRequired = infile.nextInt();
         }
 
-        //test code to check whether variables are approproiately assigned
+        //test code to display whether variables are appropriately assigned
         System.out.printf("Debug: meanInterarrival = %.3f, meanService = %.3f, numberDelaysRequired = %d\n",
                   meanInterarrival, meanService, numberDelaysRequired);
 
 
-        // write heading and input parameters
+        // write heading and input parameters to the output
         outfile.println("Single-Server Queuing System \n");
         outfile.printf("Mean Interarrival time %11.3f minutes \n\n", meanInterarrival);
         outfile.printf("Mean Service time %16.3f minutes \n\n", meanService);
@@ -252,27 +257,19 @@ public class SingleServerQueuing{
             //update time average statistical accumulators
             updateTimeAverageStats();
 
-            //invoke appropriate event function
-            switch(nextEventType){
-                case 1:
-                    arrive();
-                    break;
-                case 2:
-                    depart();
-                    break;
-                default:
-                    // should never reach this point
-                    break;
-
+            if(nextEventType == 1){
+                arrive();
+            } else if(nextEventType == 2){
+                depart();
             }
-
-            //invoke the report generator and close files
-            report();
-            infile.close();
-            outfile.close();
         }
 
-
+        //invoke the report generator and close files
+        report();
+        infile.close();
+        outfile.close();
+    
 
     }
+
 }
