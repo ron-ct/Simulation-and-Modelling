@@ -1,0 +1,26 @@
+USED CAR INVENTORY SYSTEM
+
+You will be provided some code in python.
+When you run this code, it gives you output of a car inventory system.
+There are 3 models of cars: Saloon, SUV and Truck(Lorry).
+These types of cars have different makes for example.
+Toyota Corolla
+Mileage 24231
+Year-of-manufacture 2010
+
+Your work: Simulate Graphically
+1. Draw these vehicles. Make sure they look good. Color these cars
+2. You have to use a random function to draw.
+3. The length(size) of the cars should vary. ie when you run the code again, the length should be bigger ir smaller.
+4. Also where it is placed in the view ie the coordinates should be random.
+5. use a draw() method polygons etc.
+6. Wheels should always be at the right place.
+7. The color must vary also - Color of the cars should change.
+8. There should be 3 clickable buttons corresponding to each type: Saloon, SUV, Truck.
+9. use tkinter.
+10. Draw flowers eg.roses at least 6 of them next to the vehicle.
+11. You may use flower maker tools from the internet.
+12. The flowers must have petals and stems.
+13. The flowers should have varying/different colors or the color of the flowers should change each time you run the code.
+14. There is to be a color fit function in the flower generator that should have a random function so that the color can change.
+15. The height of the flowers can be fixed.
