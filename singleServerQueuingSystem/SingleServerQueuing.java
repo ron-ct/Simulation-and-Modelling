@@ -1,62 +1,259 @@
-import java.io.File;
+import java.util.Scanner;
 import java.io.PrintWriter;
 import java.io.FileNotFoundException;
-import java.util.Scanner;
+import java.io.File;
 
-public class SingleServerQueuing {
-    // Constants
-    static final int Q_LIMIT = 100;  // Limit on queue length
-    static final int BUSY = 1;       // Server busy indicator
-    static final int IDLE = 0;       // Server idle indicator
+public class SingleServerQueuing{
+    // define constants 
+    // use static so that I can use these variables without objects
 
-    // Simulation state variables
-    static int next_event_type, num_custs_delayed, num_delays_required, num_events, num_in_q, server_status;
-    static double area_num_in_q, area_server_status, mean_interarrival, mean_service;
-    static double sim_time, time_last_event, total_of_delays;
-    // Note: Arrays are allocated with one extra element; index 0 is unused to match the C code.
-    static double[] time_arrival = new double[Q_LIMIT + 1];
-    // Only two events are used (arrival and departure); we leave index 0 unused.
-    static double[] time_next_event = new double[3];
+    static final int Q_Limit = 100;
+    static final int Busy = 1;
+    static final int Idle = 0;
+
+    //some variables declaration
+    static int nextEventType;
+    static int numberCustomersDelayed;
+    static int numberDelaysRequired;
+    static int numberEvents;
+    static int numberInQueue;
+    static int serverStatus;
+
+    static double areaNumberInQ;
+    static double areaServerStatus;
+    static double meanInterarrival;
+    static double meanService;
+    static double simulationTime;
+    static double timeLastEvent;
+    static double totalOfDelays;
+
+    static double[] timeArrival = new double[Q_Limit+1];
+    static double[] timeNextEvent = new double[3];
 
     static PrintWriter outfile;
 
-    public static void main(String[] args) {
-        Scanner infile = null;
-        try {
-            infile = new Scanner(new File("mm1.in"));
-            outfile = new PrintWriter("mm1.out");
-        } catch (FileNotFoundException e) {
-            System.out.println("File not found: " + e.getMessage());
+    //initialization function
+    static void initialize(){
+        // initialize simulation clock
+        simulationTime = 0.0;
+
+        //initialize state variables
+        serverStatus = Idle;
+        numberInQueue = 0;
+        timeLastEvent = 0.0;
+
+        //initialize statistical counters
+        numberCustomersDelayed = 0;
+        totalOfDelays = 0.0;
+        areaNumberInQ = 0.0;
+        areaServerStatus = 0.0;
+
+        /**
+         * Initialize event list
+         * Since no customers are present, the departure(service completion) event is eliminated from consideration
+         */
+
+        timeNextEvent[1] = simulationTime + expon(meanInterarrival);
+
+        /**
+         * The use of a very large number is to represent a very distant future
+         * Currently there are no customers in the system so the departure is in essence not possible at this moment
+         * I also want to mitigate premature event execution by the simulation engine.
+         * 
+         */
+        timeNextEvent[2] =  1.0e30;
+
+    }
+
+    static void timing(){
+        int i;
+        double minTimeNextEvent = 1.0e29;
+        nextEventType = 0;
+
+        //determine the event type of the next event to occur
+        // this is done by finding the minimum event time
+        for(i = 1; i <= numberEvents; ++i){
+            if(timeNextEvent[i] < minTimeNextEvent){
+                minTimeNextEvent = timeNextEvent[i];
+                nextEventType = i;
+            }
+        }
+
+        //if no event is available, exit simulation
+        if(nextEventType == 0){
+            outfile.printf("\n Event list empty at time %f", simulationTime);
+            outfile.flush();
             System.exit(1);
         }
+        simulationTime = minTimeNextEvent;
 
-        num_events = 2;
+    }
 
-        // Read input parameters: mean interarrival time, mean service time, and number of delays required.
-        if (infile.hasNextDouble()) {
-            mean_interarrival = infile.nextDouble();
+
+
+    /**
+     * Arrival event function
+     */
+    static void arrive(){
+        double delay;
+
+        //schedule next arrival
+        timeNextEvent[1] = simulationTime + expon(meanInterarrival);
+
+        //check to see whether server is busy
+        if(serverStatus == Busy){
+            //server is busy, so increment no of customers in queue
+            numberInQueue++;
+
+            //check to see whether overflow condition exists
+            if(numberInQueue > Q_Limit){
+                // the queue has overflowed so stop the simulation
+                outfile.printf("\n Overflow of the attar timeArrival at time %f", simulationTime);
+                outfile.flush();
+                System.exit(2);
+
+            }
+            // there is still room in the queue, so store the time of arrival of the 
+            // arriving customer at the (new) end of timeArrival
+            timeArrival[numberInQueue] = simulationTime;
         }
-        if (infile.hasNextDouble()) {
-            mean_service = infile.nextDouble();
-        }
-        if (infile.hasNextInt()) {
-            num_delays_required = infile.nextInt();
+        else{
+            // Server is idle, so arriving customer has a delay of zero.
+            delay = 0.0;
+            totalOfDelays += delay;
+
+            //increment the number of customers delayed, and make server busy
+            numberCustomersDelayed++;
+            serverStatus = Busy;
+
+            //schedule a departure (service completion)
+            timeNextEvent[2] = simulationTime+expon(meanService);
+
         }
 
-        // Write report heading and input parameters.
-        outfile.println("Single-server queueing system\n");
-        outfile.printf("Mean interarrival time%11.3f minutes\n\n", mean_interarrival);
-        outfile.printf("Mean service time%16.3f minutes\n\n", mean_service);
-        outfile.printf("Number of customers%14d\n\n", num_delays_required);
+    }
 
-        // Initialize the simulation.
+    static void depart(){
+        int i;
+        double delay;
+
+        //check to see whether queue is empty
+        if(numberInQueue == 0){
+            // queue is empty, so make server idle and eliminate tje departure event from consideration
+            serverStatus = Idle;
+            timeNextEvent[2] = 1.0e30;
+
+        }
+        else{
+            //queue is not empty, so decrease the number of customers in queue
+            numberInQueue--;
+
+            //compute delay of customer who is beginning service and update the total delay accumulator.
+            delay = simulationTime = timeArrival[1];
+            totalOfDelays += delay;
+
+            // increment the number of customers delayed, and schedule departure
+            numberCustomersDelayed++;
+            timeNextEvent[2] = simulationTime + expon(meanService);
+
+            //move each customer in queue if any, by one place
+            for(i = 1; i <= numberInQueue; ++i){
+                timeArrival[i] = timeArrival[i+1];
+
+            }
+        }
+
+    }
+
+    static void report(){
+        //report generator function
+        outfile.printf("\n\n Average delay in queue %11.3f minutes \n\n", totalOfDelays / numberCustomersDelayed);
+        outfile.printf("Average number in queue%10.3f\n\n", areaNumberInQ / simulationTime);
+        outfile.printf("Server utilization%15.3f\n\n", areaServerStatus / simulationTime);
+        outfile.printf("Time simulation ended%12.3f minutes", simulationTime);
+    }
+
+    static void updateTimeAverageStats(){
+        //update area accumulators for time average statistics
+
+        double timeSinceLastEvent;
+        
+        //compute time since last event, and update last-event-time marker
+        timeSinceLastEvent = simulationTime - timeLastEvent;
+        timeLastEvent = simulationTime;
+
+        //update area under numberInQueue function
+        areaNumberInQ += numberInQueue*timeSinceLastEvent;
+
+        //update area under server-busy indicator function
+        areaServerStatus += serverStatus * timeSinceLastEvent;
+        
+    }
+
+    static double expon(double mean){
+        //return an exponential random variate with mean "mean"
+        return -mean * Math.log(Math.random());
+
+    }
+
+
+    
+    
+    public static void main(String[] args){
+        //use scanner to read input
+        Scanner infile = null;
+
+        try{
+            infile = new Scanner(new File("mm1.in"));
+            outfile = new PrintWriter("mm1.out");
+
+        } catch(Exception e){
+            System.out.println("File not found: " + e.getMessage());
+            System.exit(1);
+
+        }
+
+        numberEvents = 2;
+
+        //read input parameters such as mean interarrival time, mean service time and number of delays required
+        if(infile.hasNextDouble()){
+            meanInterarrival = infile.nextDouble();
+
+        }
+
+        if(infile.hasNextDouble()){
+            meanService = infile.nextDouble();
+
+        }
+
+        if(infile.hasNextInt()){
+            numberDelaysRequired = infile.nextInt();
+        }
+
+        //test code to check whether variables are approproiately assigned
+        System.out.printf("Debug: meanInterarrival = %.3f, meanService = %.3f, numberDelaysRequired = %d\n",
+                  meanInterarrival, meanService, numberDelaysRequired);
+
+
+        // write heading and input parameters
+        outfile.println("Single-Server Queuing System \n");
+        outfile.printf("Mean Interarrival time %11.3f minutes \n\n", meanInterarrival);
+        outfile.printf("Mean Service time %16.3f minutes \n\n", meanService);
+        outfile.printf("Number of customers%14d\n\n", numberDelaysRequired);
+
+        //initialize simulation
         initialize();
 
-        // Run the simulation while more delays are still needed.
-        while (num_custs_delayed < num_delays_required) {
+        //there is need to run simulation while more delays are still needed
+        while(numberCustomersDelayed < numberDelaysRequired){
+            //determine the next event
             timing();
-            update_time_avg_stats();
-            switch (next_event_type) {
+
+            //update time average statistical accumulators
+            updateTimeAverageStats();
+
+            //invoke appropriate event function
+            switch(nextEventType){
                 case 1:
                     arrive();
                     break;
@@ -64,116 +261,18 @@ public class SingleServerQueuing {
                     depart();
                     break;
                 default:
-                    // Should never reach here.
+                    // should never reach this point
                     break;
+
             }
+
+            //invoke the report generator and close files
+            report();
+            infile.close();
+            outfile.close();
         }
 
-        // Generate report and close files.
-        report();
-        infile.close();
-        outfile.close();
-    }
 
-    // Initialization function.
-    static void initialize() {
-        sim_time = 0.0;
-        server_status = IDLE;
-        num_in_q = 0;
-        time_last_event = 0.0;
-        num_custs_delayed = 0;
-        total_of_delays = 0.0;
-        area_num_in_q = 0.0;
-        area_server_status = 0.0;
-        // Schedule the first arrival and set departure event far in the future.
-        time_next_event[1] = sim_time + expon(mean_interarrival);
-        time_next_event[2] = 1.0e30;
-    }
 
-    // Timing function.
-    static void timing() {
-        double min_time_next_event = 1.0e29;
-        next_event_type = 0;
-        // Determine the next event type by finding the minimum event time.
-        for (int i = 1; i <= num_events; i++) {
-            if (time_next_event[i] < min_time_next_event) {
-                min_time_next_event = time_next_event[i];
-                next_event_type = i;
-            }
-        }
-        // If no event is found, exit the simulation.
-        if (next_event_type == 0) {
-            outfile.printf("\nEvent list empty at time %f", sim_time);
-            outfile.flush();
-            System.exit(1);
-        }
-        sim_time = min_time_next_event;
-    }
-
-    // Arrival event function.
-    static void arrive() {
-        double delay;
-        // Schedule the next arrival.
-        time_next_event[1] = sim_time + expon(mean_interarrival);
-        if (server_status == BUSY) {
-            num_in_q++;
-            if (num_in_q > Q_LIMIT) {
-                outfile.printf("\nOverflow of the array time_arrival at time %f", sim_time);
-                outfile.flush();
-                System.exit(2);
-            }
-            // Record the time of arrival for the customer in the queue.
-            time_arrival[num_in_q] = sim_time;
-        } else {
-            // If server is idle, customer experiences zero delay.
-            delay = 0.0;
-            total_of_delays += delay;
-            num_custs_delayed++;
-            server_status = BUSY;
-            // Schedule a departure event.
-            time_next_event[2] = sim_time + expon(mean_service);
-        }
-    }
-
-    // Departure event function.
-    static void depart() {
-        double delay;
-        if (num_in_q == 0) {
-            // If no customers are waiting, mark the server as idle.
-            server_status = IDLE;
-            time_next_event[2] = 1.0e30;
-        } else {
-            // The customer at the front of the queue begins service.
-            num_in_q--;
-            delay = sim_time - time_arrival[1];
-            total_of_delays += delay;
-            num_custs_delayed++;
-            time_next_event[2] = sim_time + expon(mean_service);
-            // Shift each remaining customer up in the queue.
-            for (int i = 1; i <= num_in_q; i++) {
-                time_arrival[i] = time_arrival[i + 1];
-            }
-        }
-    }
-
-    // Report generator function.
-    static void report() {
-        outfile.printf("\n\nAverage delay in queue%11.3f minutes\n\n", total_of_delays / num_custs_delayed);
-        outfile.printf("Average number in queue%10.3f\n\n", area_num_in_q / sim_time);
-        outfile.printf("Server utilization%15.3f\n\n", area_server_status / sim_time);
-        outfile.printf("Time simulation ended%12.3f minutes", sim_time);
-    }
-
-    // Update area accumulators for time-average statistics.
-    static void update_time_avg_stats() {
-        double time_since_last_event = sim_time - time_last_event;
-        time_last_event = sim_time;
-        area_num_in_q += num_in_q * time_since_last_event;
-        area_server_status += server_status * time_since_last_event;
-    }
-
-    // Exponential variate generation function.
-    static double expon(double mean) {
-        return -mean * Math.log(Math.random());
     }
 }
